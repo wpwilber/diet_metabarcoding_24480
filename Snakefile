@@ -1,8 +1,8 @@
-PRIMER1_F = "GATATCCGTTGCCGAGAGTC"
-PRIMER1_R = "CCGAAGGCGTCAAGGAACAC"
+ITS1_F = "GATATCCGTTGCCGAGAGTC"
+ITS1_R = "CCGAAGGCGTCAAGGAACAC"
 
-PRIMER2_F = "GGGCAATCCTGAGCCAA"
-PRIMER2_R = "CCATTGAGTCTCTGCACCTATC"
+trnL_F = "GGGCAATCCTGAGCCAA"
+trnL_R = "CCATTGAGTCTCTGCACCTATC"
 
 # Auto-discover sample names from fastq directory
 SAMPLES = glob_wildcards("fastq/{sample}_R1_001.fastq.gz").sample
@@ -13,17 +13,19 @@ rule all:
         expand("qc_raw/{sample}_R1_001_fastqc.html", sample=SAMPLES),
         expand("qc_raw/{sample}_R2_001_fastqc.html", sample=SAMPLES),
         # demux QC for amp1, amp2, unnasigned
-        expand("qc_demux/{sample}_amp1_R1_fastqc.html", sample=SAMPLES),
-        expand("qc_demux/{sample}_amp1_R2_fastqc.html", sample=SAMPLES),
-        expand("qc_demux/{sample}_amp2_R1_fastqc.html", sample=SAMPLES),
-        expand("qc_demux/{sample}_amp2_R2_fastqc.html", sample=SAMPLES),
-        expand("qc_demux/{sample}_unassigned_R1_fastqc.html", sample=SAMPLES),
-        expand("qc_demux/{sample}_unassigned_R2_fastqc.html", sample=SAMPLES),
+        expand("qc_demux/{sample}_{amp}_R1_fastqc.html",
+                sample=SAMPLES,
+                amp=["ITS1", "trnL", "unassigned"]),
+        expand("qc_demux/{sample}_{amp}_R2_fastqc.html",
+                sample=SAMPLES,
+                amp=["ITS1", "trnL", "unassigned"]),
         # demuxed samples
-        expand("demux/{sample}_amp1_R1.fastq.gz", sample=SAMPLES),
-        expand("demux/{sample}_amp1_R2.fastq.gz", sample=SAMPLES),
-        expand("demux/{sample}_amp2_R1.fastq.gz", sample=SAMPLES),
-        expand("demux/{sample}_amp2_R2.fastq.gz", sample=SAMPLES),
+        expand("demux/{sample}_{amp}_R1.fastq.gz",
+                sample=SAMPLES,
+                amp=["ITS1", "trnL"]),
+        expand("demux/{sample}_{amp}_R2.fastq.gz",
+                sample=SAMPLES,
+                amp=["ITS1", "trnL"]),
         # read counts
         "read_counts/read_counts.tsv",
 
@@ -51,10 +53,10 @@ rule demux_by_primer:
         r1 = "fastq/{sample}_R1_001.fastq.gz",
         r2 = "fastq/{sample}_R2_001.fastq.gz"
     output:
-        amp1_r1 = "demux/{sample}_amp1_R1.fastq.gz",
-        amp1_r2 = "demux/{sample}_amp1_R2.fastq.gz",
-        amp2_r1 = "demux/{sample}_amp2_R1.fastq.gz",
-        amp2_r2 = "demux/{sample}_amp2_R2.fastq.gz",
+        ITS1_r1 = "demux/{sample}_ITS1_R1.fastq.gz",
+        ITS1_r2 = "demux/{sample}_ITS1_R2.fastq.gz",
+        trnL_r1 = "demux/{sample}_trnL_R1.fastq.gz",
+        trnL_r2 = "demux/{sample}_trnL_R2.fastq.gz",
         un_r1   = "demux/{sample}_unassigned_R1.fastq.gz",
         un_r2   = "demux/{sample}_unassigned_R2.fastq.gz"
     threads: 8
@@ -65,8 +67,8 @@ rule demux_by_primer:
             -e 0.10 \
             --action=none \
             \
-            -g amp1=^{PRIMER1_F} \
-            -g amp2=^{PRIMER2_F} \
+            -g ITS1=^{ITS1_F} \
+            -g trnL=^{trnL_F} \
             \
             --pair-filter=any \
             \
@@ -101,7 +103,7 @@ rule count_reads:
                      sample=SAMPLES, read=[1,2]),
         demux = expand("demux/{sample}_{amp}_R{read}.fastq.gz",
                        sample=SAMPLES,
-                       amp=["amp1", "amp2", "unassigned"],
+                       amp=["ITS1", "trnL", "unassigned"],
                        read=[1,2])
     output:
         "read_counts/read_counts.tsv"
