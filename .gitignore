@@ -1,2 +1,11 @@
+.snakemake/
 data/*
 !data/.gitkeep
+demux/*
+!demux/.gitkeep
+qc_raw/*
+!qc_raw/.gitkeep:wq
+qc_demux/*
+!qc_demux/.gitkeep
+fastq/*
+!fastq/.gitkeep
