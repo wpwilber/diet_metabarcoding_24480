@@ -28,6 +28,13 @@ rule all:
                 amp=["ITS1", "trnL"]),
         # read counts
         "read_counts/read_counts.tsv",
+        # trimmed reads
+        expand("trimmed/{sample}_{amp}_R1.trimmed.fastq.gz",
+                sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("trimmed/{sample}_{amp}_R2.trimmed.fastq.gz",
+                sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("trimmed_reports/{sample}_{amp}_cutadapt.txt",
+                sample=SAMPLES, amp=["ITS1", "trnL"])
 
 rule fastqc_raw:
     conda: "envs/environment.yaml"
@@ -47,6 +54,7 @@ rule fastqc_raw:
         fastqc --threads {threads} --outdir qc_raw {input.r1} {input.r2}
         """
 
+# This rule leaves a small percentage of unassigned reads that very nearly match the expected primer sequence. It might be worth relaxing e or dropping ^ to see if we can include a few more reads, but it's pretty marginal.
 rule demux_by_primer:
     conda: "envs/environment.yaml"
     input:
@@ -125,4 +133,32 @@ rule count_reads:
             n=$(gzip -dc "$f" | wc -l)
             echo -e "$(basename "$f")\t$((n/4))" >> {output}
         done
+        """
+
+rule trim_primers:
+    conda: "envs/environment.yaml"
+    input:
+        r1 = "demux/{sample}_{amp}_R1.fastq.gz",
+        r2 = "demux/{sample}_{amp}_R2.fastq.gz"
+    output:
+        r1_trim = "trimmed/{sample}_{amp}_R1.trimmed.fastq.gz",
+        r2_trim = "trimmed/{sample}_{amp}_R2.trimmed.fastq.gz",
+        report = "trimmed_reports/{sample}_{amp}_cutadapt.txt"
+    threads: 4
+    params:
+        # Map amplicon name → primer sequences
+        F = lambda wc: {"ITS1": ITS1_F, "trnL": trnL_F}[wc.amp],
+        R = lambda wc: {"ITS1": ITS1_R, "trnL": trnL_R}[wc.amp]
+    shell:
+        r"""
+        mkdir -p trimmed
+
+        cutadapt \
+            -j {threads} \
+            -g ^{params.F} \
+            -G ^{params.R} \
+            -o {output.r1_trim} \
+            -p {output.r2_trim} \
+            {input.r1} {input.r2} \
+            > {output.report} 2>&1        
         """

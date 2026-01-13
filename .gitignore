@@ -11,3 +11,7 @@ fastq/*
 !fastq/.gitkeep
 read_counts/*
 !read_counts/.gitkeep
+trimmed/*
+!trimmed/.gitkeep
+trimmed_reports/*
+!trimmed_reports/.gitkeep
