@@ -23,7 +23,9 @@ rule all:
         expand("demux/{sample}_amp1_R1.fastq.gz", sample=SAMPLES),
         expand("demux/{sample}_amp1_R2.fastq.gz", sample=SAMPLES),
         expand("demux/{sample}_amp2_R1.fastq.gz", sample=SAMPLES),
-        expand("demux/{sample}_amp2_R2.fastq.gz", sample=SAMPLES)
+        expand("demux/{sample}_amp2_R2.fastq.gz", sample=SAMPLES),
+        # read counts
+        "read_counts/read_counts.tsv",
 
 rule fastqc_raw:
     conda: "envs/environment.yaml"
@@ -91,4 +93,34 @@ rule fastqc_demux:
         r"""
         mkdir -p qc_demux
         fastqc --threads {threads} --outdir qc_demux {input}
+        """
+
+rule count_reads:
+    input:
+        raw = expand("fastq/{sample}_R{read}_001.fastq.gz",
+                     sample=SAMPLES, read=[1,2]),
+        demux = expand("demux/{sample}_{amp}_R{read}.fastq.gz",
+                       sample=SAMPLES,
+                       amp=["amp1", "amp2", "unassigned"],
+                       read=[1,2])
+    output:
+        "read_counts/read_counts.tsv"
+    threads: 2
+    shell:
+        r"""
+        mkdir -p read_counts
+
+        echo -e "file\treads" > {output}
+
+        # Count reads in raw FASTQs
+        for f in fastq/*.fastq.gz; do
+            n=$(gzip -dc "$f" | wc -l)
+            echo -e "$(basename "$f")\t$((n/4))" >> {output}
+        done
+
+        # Count reads in demultiplexed FASTQs
+        for f in demux/*.fastq.gz; do
+            n=$(gzip -dc "$f" | wc -l)
+            echo -e "$(basename "$f")\t$((n/4))" >> {output}
+        done
         """

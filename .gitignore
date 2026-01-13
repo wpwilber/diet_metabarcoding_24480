@@ -9,3 +9,5 @@ qc_demux/*
 !qc_demux/.gitkeep
 fastq/*
 !fastq/.gitkeep
+read_counts/*
+!read_counts/.gitkeep
