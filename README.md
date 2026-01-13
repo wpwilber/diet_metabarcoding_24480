@@ -1,0 +1,1 @@
+This is the project directory for the diet metabarcoding 24480 project. This project is under early development. Reproducing this analysis requires Conda, Snakemake and a Unix environment. This directory contains no raw sequencing data or generated files. Contact Willi Wilber (wwilber@nd.edu) for access to raw data or support in reproducing this analysis. 
