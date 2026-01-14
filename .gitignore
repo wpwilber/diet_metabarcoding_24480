@@ -15,3 +15,5 @@ trimmed/*
 !trimmed/.gitkeep
 trimmed_reports/*
 !trimmed_reports/.gitkeep
+primer_qc/*
+!primer_qc/.gitkeep
