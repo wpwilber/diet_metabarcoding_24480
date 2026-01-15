@@ -23,6 +23,13 @@ rule all:
         expand("qc_demux/{sample}_{amp}_R2_fastqc.html",
                 sample=SAMPLES,
                 amp=["ITS1", "trnL", "unassigned"]),
+        # trimming QC
+        expand("qc_trimmed/{sample}_{amp}_R1.trimmed_fastqc.html",
+                sample=SAMPLES,
+                amp=["ITS1", "trnL"]),
+        expand("qc_trimmed/{sample}_{amp}_R2.trimmed_fastqc.html",
+                sample=SAMPLES,
+                amp=["ITS1", "trnL"]),
         # demuxed samples
         expand("demux/{sample}_{amp}_R1.fastq.gz",
                 sample=SAMPLES,
@@ -161,7 +168,6 @@ rule trim_primers:
         report = "trimmed_reports/{sample}_{amp}_cutadapt.txt"
     threads: 4
     params:
-        # Map amplicon name → primer sequences
         F = lambda wc: {"ITS1": ITS1_F, "trnL": trnL_F}[wc.amp],
         R = lambda wc: {"ITS1": ITS1_R, "trnL": trnL_R}[wc.amp]
     shell:
@@ -172,11 +178,13 @@ rule trim_primers:
             -j {threads} \
             -g ^{params.F} \
             -G ^{params.R} \
+            -a CTGTCTCTTATACACATCT \
+            -A AGATGTGTATAAGAGACAG \
             --max-n 0 \
             -o {output.r1_trim} \
             -p {output.r2_trim} \
             {input.r1} {input.r2} \
-            > {output.report} 2>&1        
+            > {output.report} 2>&1
         """
 
 # This rule generates a QC report from cutadapts reporting generated in the rule above.
@@ -276,3 +284,13 @@ rule summarize_primer_qc:
                     f"{n_filtered}\t{retained}\t{perfect}\t{mismatch1}\t{mismatch2}\t{truncated}\n"
                 )
 
+# This rule runs fastqc on the trimmed samples. This is probably more useful than after demuxing and I can drop the previous QC report above.
+
+rule fastqc_trimmed:
+    input:
+        "trimmed/{sample}_{amp}_R{read}.trimmed.fastq.gz"
+    output:
+        "qc_trimmed/{sample}_{amp}_R{read}.trimmed_fastqc.html"
+    conda: "envs/environment.yaml"
+    shell:
+        "fastqc {input} --outdir qc_trimmed"
