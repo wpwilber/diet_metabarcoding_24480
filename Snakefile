@@ -45,6 +45,18 @@ rule all:
         expand("trim_clean_qc/cleaned_reports/{sample}_{amp}_fastp.json",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
 
+        # length filtered files
+        expand("trim_clean_qc/length_filtered/{sample}_{amp}_R1.lenfilt.fastq.gz",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("trim_clean_qc/length_filtered/{sample}_{amp}_R2.lenfilt.fastq.gz",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+
+       # final QC
+        expand("trim_clean_qc/qc_final/{sample}_{amp}_R1.lenfilt_fastqc.html",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("trim_clean_qc/qc_final/{sample}_{amp}_R2.lenfilt_fastqc.html",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+
         # primer QC summary
         "trim_clean_qc/primer_qc/primer_qc_summary.tsv"
 
@@ -193,6 +205,67 @@ rule trim_adapters_fastp:
             -w {threads} \
             --html {output.html} \
             --json {output.json}
+        """
+
+# The following rule applies a max length filter to the fastp output. This discards junk sequences that were not trimmed to the expect size range.
+
+rule filter_length:
+    input:
+        r1 = "trim_clean_qc/cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
+        r2 = "trim_clean_qc/cleaned/{sample}_{amp}_R2.cleaned.fastq.gz"
+    output:
+        r1_filt = "trim_clean_qc/length_filtered/{sample}_{amp}_R1.lenfilt.fastq.gz",
+        r2_filt = "trim_clean_qc/length_filtered/{sample}_{amp}_R2.lenfilt.fastq.gz"
+    params:
+        max_len = lambda wc: {"ITS1": 90, "trnL": 70}[wc.amp]
+    threads: 2
+    shell:
+        r"""
+        mkdir -p trim_clean_qc/length_filtered
+
+        python3 - << 'EOF'
+import gzip
+
+max_len = {params.max_len}
+
+def filter_fastq(infile, outfile):
+    with gzip.open(infile, "rt") as fin, gzip.open(outfile, "wt") as fout:
+        while True:
+            h = fin.readline()
+            if not h:
+                break
+            seq = fin.readline().rstrip()
+            plus = fin.readline()
+            qual = fin.readline().rstrip()
+
+            if len(seq) <= max_len:
+                fout.write(h)
+                fout.write(seq + "\n")
+                fout.write(plus)
+                fout.write(qual + "\n")
+
+filter_fastq("{input.r1}", "{output.r1_filt}")
+filter_fastq("{input.r2}", "{output.r2_filt}")
+EOF
+        """
+
+# Run a final fastqc on the final length filtered files.
+
+rule fastqc_final:
+    conda: "envs/environment.yaml"
+    input:
+        r1 = "trim_clean_qc/length_filtered/{sample}_{amp}_R1.lenfilt.fastq.gz",
+        r2 = "trim_clean_qc/length_filtered/{sample}_{amp}_R2.lenfilt.fastq.gz"
+    output:
+        "trim_clean_qc/qc_final/{sample}_{amp}_R1.lenfilt_fastqc.html",
+        "trim_clean_qc/qc_final/{sample}_{amp}_R1.lenfilt_fastqc.zip",
+        "trim_clean_qc/qc_final/{sample}_{amp}_R2.lenfilt_fastqc.html",
+        "trim_clean_qc/qc_final/{sample}_{amp}_R2.lenfilt_fastqc.zip"
+    threads: 2
+    shell:
+        r"""
+        mkdir -p trim_clean_qc/qc_final
+        fastqc --threads {threads} --outdir trim_clean_qc/qc_final {input.r1} {input.r2}
         """
 
 # This rule generates a QC report from cutadapts reporting generated in the rule above.
