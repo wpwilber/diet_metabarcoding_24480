@@ -13,40 +13,40 @@ SAMPLES = glob_wildcards("fastq/{sample}_R1_001.fastq.gz").sample
 rule all:
     input:
         # demux QC
-        expand("qc_demux/{sample}_{amp}_R1_fastqc.html",
+        expand("trim_clean_qc/qc_demux/{sample}_{amp}_R1_fastqc.html",
                sample=SAMPLES, amp=["ITS1", "trnL", "unassigned"]),
-        expand("qc_demux/{sample}_{amp}_R2_fastqc.html",
+        expand("trim_clean_qc/qc_demux/{sample}_{amp}_R2_fastqc.html",
                sample=SAMPLES, amp=["ITS1", "trnL", "unassigned"]),
 
         # demuxed samples
-        expand("demux/{sample}_{amp}_R1.fastq.gz",
+        expand("trim_clean_qc/demux/{sample}_{amp}_R1.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        expand("demux/{sample}_{amp}_R2.fastq.gz",
+        expand("trim_clean_qc/demux/{sample}_{amp}_R2.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
 
         # read counts
-        "read_counts/read_counts.tsv",
+        "trim_clean_qc/read_counts/read_counts.tsv",
 
         # trimmed reads from cutadapt
-        expand("trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
+        expand("trim_clean_qc/trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        expand("trimmed/{sample}_{amp}_R2.primertrim.fastq.gz",
+        expand("trim_clean_qc/trimmed/{sample}_{amp}_R2.primertrim.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        expand("trimmed_reports/{sample}_{amp}_cutadapt.txt",
+        expand("trim_clean_qc/trimmed_reports/{sample}_{amp}_cutadapt.txt",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
 
         # cleaned reads from fastp
-        expand("cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
+        expand("trim_clean_qc/cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        expand("cleaned/{sample}_{amp}_R2.cleaned.fastq.gz",
+        expand("trim_clean_qc/cleaned/{sample}_{amp}_R2.cleaned.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        expand("cleaned_reports/{sample}_{amp}_fastp.html",
+        expand("trim_clean_qc/cleaned_reports/{sample}_{amp}_fastp.html",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        expand("cleaned_reports/{sample}_{amp}_fastp.json",
+        expand("trim_clean_qc/cleaned_reports/{sample}_{amp}_fastp.json",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
 
         # primer QC summary
-        "primer_qc/primer_qc_summary.tsv"
+        "trim_clean_qc/primer_qc/primer_qc_summary.tsv"
 
 
 # This rule separates the fastq files by target amplicon (ITS1 or trnL). In this pipeline I refer to this step as "demuxing" even though it does not fit a precise definition of demultiplexing. This rule leaves a small percentage of unassigned reads that often very nearly match the expected primer sequence. It might be worth relaxing e or dropping ^ to see if we can include a few more reads, but it's pretty marginal.
@@ -57,12 +57,12 @@ rule demux_by_primer:
         r1 = "fastq/{sample}_R1_001.fastq.gz",
         r2 = "fastq/{sample}_R2_001.fastq.gz"
     output:
-        ITS1_r1 = "demux/{sample}_ITS1_R1.fastq.gz",
-        ITS1_r2 = "demux/{sample}_ITS1_R2.fastq.gz",
-        trnL_r1 = "demux/{sample}_trnL_R1.fastq.gz",
-        trnL_r2 = "demux/{sample}_trnL_R2.fastq.gz",
-        un_r1   = "demux/{sample}_unassigned_R1.fastq.gz",
-        un_r2   = "demux/{sample}_unassigned_R2.fastq.gz"
+        ITS1_r1 = "trim_clean_qc/demux/{sample}_ITS1_R1.fastq.gz",
+        ITS1_r2 = "trim_clean_qc/demux/{sample}_ITS1_R2.fastq.gz",
+        trnL_r1 = "trim_clean_qc/demux/{sample}_trnL_R1.fastq.gz",
+        trnL_r2 = "trim_clean_qc/demux/{sample}_trnL_R2.fastq.gz",
+        un_r1   = "trim_clean_qc/demux/{sample}_unassigned_R1.fastq.gz",
+        un_r2   = "trim_clean_qc/demux/{sample}_unassigned_R2.fastq.gz"
     threads: 8
     shell:
         r"""
@@ -79,8 +79,8 @@ rule demux_by_primer:
             --untrimmed-output        {output.un_r1} \
             --untrimmed-paired-output {output.un_r2} \
             \
-            -o demux/{wildcards.sample}_{{name}}_R1.fastq.gz \
-            -p demux/{wildcards.sample}_{{name}}_R2.fastq.gz \
+            -o trim_clean_qc/demux/{wildcards.sample}_{{name}}_R1.fastq.gz \
+            -p trim_clean_qc/demux/{wildcards.sample}_{{name}}_R2.fastq.gz \
             {input.r1} {input.r2}
         """
 
@@ -89,18 +89,18 @@ rule demux_by_primer:
 rule fastqc_demux:
     conda: "envs/environment.yaml"
     input:
-        "demux/{sample}_{amp}_R1.fastq.gz",
-        "demux/{sample}_{amp}_R2.fastq.gz"
+        "trim_clean_qc/demux/{sample}_{amp}_R1.fastq.gz",
+        "trim_clean_qc/demux/{sample}_{amp}_R2.fastq.gz"
     output:
-        "qc_demux/{sample}_{amp}_R1_fastqc.html",
-        "qc_demux/{sample}_{amp}_R1_fastqc.zip",
-        "qc_demux/{sample}_{amp}_R2_fastqc.html",
-        "qc_demux/{sample}_{amp}_R2_fastqc.zip"
+        "trim_clean_qc/qc_demux/{sample}_{amp}_R1_fastqc.html",
+        "trim_clean_qc/qc_demux/{sample}_{amp}_R1_fastqc.zip",
+        "trim_clean_qc/qc_demux/{sample}_{amp}_R2_fastqc.html",
+        "trim_clean_qc/qc_demux/{sample}_{amp}_R2_fastqc.zip"
     threads: 2
     shell:
         r"""
-        mkdir -p qc_demux
-        fastqc --threads {threads} --outdir qc_demux {input}
+        mkdir -p trim_clean_qc/qc_demux
+        fastqc --threads {threads} --outdir trim_clean_qc/qc_demux {input}
         """
 
 # This rule counts the number of reads in each fastq after demuxing. See the output file read_counts.tsv.
@@ -109,27 +109,25 @@ rule count_reads:
     input:
         raw = expand("fastq/{sample}_R{read}_001.fastq.gz",
                      sample=SAMPLES, read=[1,2]),
-        demux = expand("demux/{sample}_{amp}_R{read}.fastq.gz",
+        demux = expand("trim_clean_qc/demux/{sample}_{amp}_R{read}.fastq.gz",
                        sample=SAMPLES,
                        amp=["ITS1", "trnL", "unassigned"],
                        read=[1,2])
     output:
-        "read_counts/read_counts.tsv"
+        "trim_clean_qc/read_counts/read_counts.tsv"
     threads: 2
     shell:
         r"""
-        mkdir -p read_counts
+        mkdir -p trim_clean_qc/read_counts
 
         echo -e "file\treads" > {output}
 
-        # Count reads in raw FASTQs
         for f in fastq/*.fastq.gz; do
             n=$(gzip -dc "$f" | wc -l)
             echo -e "$(basename "$f")\t$((n/4))" >> {output}
         done
 
-        # Count reads in demultiplexed FASTQs
-        for f in demux/*.fastq.gz; do
+        for f in trim_clean_qc/demux/*.fastq.gz; do
             n=$(gzip -dc "$f" | wc -l)
             echo -e "$(basename "$f")\t$((n/4))" >> {output}
         done
@@ -140,19 +138,19 @@ rule count_reads:
 rule trim_primers:
     conda: "envs/environment.yaml"
     input:
-        r1 = "demux/{sample}_{amp}_R1.fastq.gz",
-        r2 = "demux/{sample}_{amp}_R2.fastq.gz"
+        r1 = "trim_clean_qc/demux/{sample}_{amp}_R1.fastq.gz",
+        r2 = "trim_clean_qc/demux/{sample}_{amp}_R2.fastq.gz"
     output:
-        r1_trim = "trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
-        r2_trim = "trimmed/{sample}_{amp}_R2.primertrim.fastq.gz",
-        report = "trimmed_reports/{sample}_{amp}_cutadapt.txt"
+        r1_trim = "trim_clean_qc/trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
+        r2_trim = "trim_clean_qc/trimmed/{sample}_{amp}_R2.primertrim.fastq.gz",
+        report = "trim_clean_qc/trimmed_reports/{sample}_{amp}_cutadapt.txt"
     threads: 4
     params:
         F = lambda wc: {"ITS1": ITS1_F, "trnL": trnL_F}[wc.amp],
         R = lambda wc: {"ITS1": ITS1_R, "trnL": trnL_R}[wc.amp]
     shell:
         r"""
-        mkdir -p trimmed trimmed_reports
+        mkdir -p trim_clean_qc/trimmed trim_clean_qc/trimmed_reports
 
         cutadapt \
             -j {threads} \
@@ -172,17 +170,17 @@ rule trim_primers:
 rule trim_adapters_fastp:
     conda: "envs/environment.yaml"
     input:
-        r1 = "trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
-        r2 = "trimmed/{sample}_{amp}_R2.primertrim.fastq.gz"
+        r1 = "trim_clean_qc/trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
+        r2 = "trim_clean_qc/trimmed/{sample}_{amp}_R2.primertrim.fastq.gz"
     output:
-        r1_clean = "cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
-        r2_clean = "cleaned/{sample}_{amp}_R2.cleaned.fastq.gz",
-        html     = "cleaned_reports/{sample}_{amp}_fastp.html",
-        json     = "cleaned_reports/{sample}_{amp}_fastp.json"
+        r1_clean = "trim_clean_qc/cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
+        r2_clean = "trim_clean_qc/cleaned/{sample}_{amp}_R2.cleaned.fastq.gz",
+        html     = "trim_clean_qc/cleaned_reports/{sample}_{amp}_fastp.html",
+        json     = "trim_clean_qc/cleaned_reports/{sample}_{amp}_fastp.json"
     threads: 4
     shell:
         r"""
-        mkdir -p cleaned cleaned_reports
+        mkdir -p trim_clean_qc/cleaned trim_clean_qc/cleaned_reports
 
         fastp \
             -i {input.r1} \
@@ -202,18 +200,18 @@ rule trim_adapters_fastp:
 rule summarize_primer_qc:
     input:
         reports = expand(
-            "trimmed_reports/{sample}_{amp}_cutadapt.txt",
+            "trim_clean_qc/trimmed_reports/{sample}_{amp}_cutadapt.txt",
             sample=SAMPLES,
             amp=["ITS1", "trnL"]
         )
     output:
-        "primer_qc/primer_qc_summary.tsv"
+        "trim_clean_qc/primer_qc/primer_qc_summary.tsv"
     run:
         import re
         import os
         from pathlib import Path
 
-        os.makedirs("primer_qc", exist_ok=True)
+        os.makedirs("trim_clean_qc/primer_qc", exist_ok=True)
 
         # Header for the summary table
         with open(output[0], "w") as out:
