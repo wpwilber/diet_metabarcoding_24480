@@ -58,7 +58,10 @@ rule all:
                sample=SAMPLES, amp=["ITS1", "trnL"]),
 
         # primer QC summary
-        "trim_clean_qc/primer_qc/primer_qc_summary.tsv"
+        "trim_clean_qc/primer_qc/primer_qc_summary.tsv",
+
+        # read retention table
+        "trim_clean_qc/read_summary/read_retention.tsv"
 
 
 # This rule separates the fastq files by target amplicon (ITS1 or trnL). In this pipeline I refer to this step as "demuxing" even though it does not fit a precise definition of demultiplexing. This rule leaves a small percentage of unassigned reads that often very nearly match the expected primer sequence. It might be worth relaxing e or dropping ^ to see if we can include a few more reads, but it's pretty marginal.
@@ -365,4 +368,49 @@ rule summarize_primer_qc:
                     f"{n_filtered}\t{retained}\t{perfect}\t{mismatch1}\t{mismatch2}\t{truncated}\n"
                 )
 
+# Rule for generation a read retention table across pipeline steps.
+rule summarize_read_retention:
+    input:
+        raw = expand("fastq/{sample}_R1_001.fastq.gz", sample=SAMPLES),
+        unassigned = expand("trim_clean_qc/demux/{sample}_unassigned_R1.fastq.gz", sample=SAMPLES),
+        its_demux = expand("trim_clean_qc/demux/{sample}_ITS1_R1.fastq.gz", sample=SAMPLES),
+        its_trim = expand("trim_clean_qc/trimmed/{sample}_ITS1_R1.primertrim.fastq.gz", sample=SAMPLES),
+        its_clean = expand("trim_clean_qc/cleaned/{sample}_ITS1_R1.cleaned.fastq.gz", sample=SAMPLES),
+        its_filt = expand("trim_clean_qc/length_filtered/{sample}_ITS1_R1.lenfilt.fastq.gz", sample=SAMPLES),
+        trnl_demux = expand("trim_clean_qc/demux/{sample}_trnL_R1.fastq.gz", sample=SAMPLES),
+        trnl_trim = expand("trim_clean_qc/trimmed/{sample}_trnL_R1.primertrim.fastq.gz", sample=SAMPLES),
+        trnl_clean = expand("trim_clean_qc/cleaned/{sample}_trnL_R1.cleaned.fastq.gz", sample=SAMPLES),
+        trnl_filt = expand("trim_clean_qc/length_filtered/{sample}_trnL_R1.lenfilt.fastq.gz", sample=SAMPLES)
+    output:
+        "trim_clean_qc/read_summary/read_retention.tsv"
+    run:
+        import gzip, os
+        os.makedirs("trim_clean_qc/read_summary", exist_ok=True)
+
+        def count_reads(path):
+            with gzip.open(path, "rt") as f:
+                return sum(1 for _ in f) // 4
+
+        with open(output[0], "w") as out:
+            out.write(
+                "sample\traw\tunassigned\tITS_demuxed\tITS_trimmed\tITS_cleaned\tITS_filtered\t"
+                "trnL_demuxed\ttrnL_trimmed\ttrnL_cleaned\ttrnL_filtered\n"
+            )
+
+            for sample in SAMPLES:
+                raw = count_reads(f"fastq/{sample}_R1_001.fastq.gz")
+                unassigned = count_reads(f"trim_clean_qc/demux/{sample}_unassigned_R1.fastq.gz")
+                its_demux = count_reads(f"trim_clean_qc/demux/{sample}_ITS1_R1.fastq.gz")
+                its_trim = count_reads(f"trim_clean_qc/trimmed/{sample}_ITS1_R1.primertrim.fastq.gz")
+                its_clean = count_reads(f"trim_clean_qc/cleaned/{sample}_ITS1_R1.cleaned.fastq.gz")
+                its_filt = count_reads(f"trim_clean_qc/length_filtered/{sample}_ITS1_R1.lenfilt.fastq.gz")
+                trnl_demux = count_reads(f"trim_clean_qc/demux/{sample}_trnL_R1.fastq.gz")
+                trnl_trim = count_reads(f"trim_clean_qc/trimmed/{sample}_trnL_R1.primertrim.fastq.gz")
+                trnl_clean = count_reads(f"trim_clean_qc/cleaned/{sample}_trnL_R1.cleaned.fastq.gz")
+                trnl_filt = count_reads(f"trim_clean_qc/length_filtered/{sample}_trnL_R1.lenfilt.fastq.gz")
+
+                out.write(
+                    f"{sample}\t{raw}\t{unassigned}\t{its_demux}\t{its_trim}\t{its_clean}\t{its_filt}\t"
+                    f"{trnl_demux}\t{trnl_trim}\t{trnl_clean}\t{trnl_filt}\n"
+                )
 
