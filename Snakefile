@@ -10,64 +10,44 @@ trnL_R = "CCATTGAGTCTCTGCACCTATC"
 SAMPLES = glob_wildcards("fastq/{sample}_R1_001.fastq.gz").sample
 
 # Define snakemake inputs.
-
 rule all:
     input:
-        # QC for raw samples
-        expand("qc_raw/{sample}_R1_001_fastqc.html", sample=SAMPLES),
-        expand("qc_raw/{sample}_R2_001_fastqc.html", sample=SAMPLES),
-        # demux QC for amp1, amp2, unnasigned
+        # demux QC
         expand("qc_demux/{sample}_{amp}_R1_fastqc.html",
-                sample=SAMPLES,
-                amp=["ITS1", "trnL", "unassigned"]),
+               sample=SAMPLES, amp=["ITS1", "trnL", "unassigned"]),
         expand("qc_demux/{sample}_{amp}_R2_fastqc.html",
-                sample=SAMPLES,
-                amp=["ITS1", "trnL", "unassigned"]),
-        # trimming QC
-        expand("qc_trimmed/{sample}_{amp}_R1.trimmed_fastqc.html",
-                sample=SAMPLES,
-                amp=["ITS1", "trnL"]),
-        expand("qc_trimmed/{sample}_{amp}_R2.trimmed_fastqc.html",
-                sample=SAMPLES,
-                amp=["ITS1", "trnL"]),
+               sample=SAMPLES, amp=["ITS1", "trnL", "unassigned"]),
+
         # demuxed samples
         expand("demux/{sample}_{amp}_R1.fastq.gz",
-                sample=SAMPLES,
-                amp=["ITS1", "trnL"]),
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
         expand("demux/{sample}_{amp}_R2.fastq.gz",
-                sample=SAMPLES,
-                amp=["ITS1", "trnL"]),
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+
         # read counts
         "read_counts/read_counts.tsv",
-        # trimmed reads
-        expand("trimmed/{sample}_{amp}_R1.trimmed.fastq.gz",
-                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        expand("trimmed/{sample}_{amp}_R2.trimmed.fastq.gz",
-                sample=SAMPLES, amp=["ITS1", "trnL"]),
+
+        # trimmed reads from cutadapt
+        expand("trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("trimmed/{sample}_{amp}_R2.primertrim.fastq.gz",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
         expand("trimmed_reports/{sample}_{amp}_cutadapt.txt",
-                sample=SAMPLES, amp=["ITS1", "trnL"]),
-        # primer qc summary
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+
+        # cleaned reads from fastp
+        expand("cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("cleaned/{sample}_{amp}_R2.cleaned.fastq.gz",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("cleaned_reports/{sample}_{amp}_fastp.html",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+        expand("cleaned_reports/{sample}_{amp}_fastp.json",
+               sample=SAMPLES, amp=["ITS1", "trnL"]),
+
+        # primer QC summary
         "primer_qc/primer_qc_summary.tsv"
 
-# This rule runs fastqc on the raw input files. We received fastqc reports from the sequencing facility but I run my own here anyways.
-
-rule fastqc_raw:
-    conda: "envs/environment.yaml"
-    input:
-        r1 = "fastq/{sample}_R1_001.fastq.gz",
-        r2 = "fastq/{sample}_R2_001.fastq.gz"
-    output:
-        "qc_raw/{sample}_R1_001_fastqc.html",
-        "qc_raw/{sample}_R1_001_fastqc.zip",
-        "qc_raw/{sample}_R2_001_fastqc.html",
-        "qc_raw/{sample}_R2_001_fastqc.zip"
-
-    threads: 2
-    shell:
-        r"""
-        mkdir -p qc_raw
-        fastqc --threads {threads} --outdir qc_raw {input.r1} {input.r2}
-        """
 
 # This rule separates the fastq files by target amplicon (ITS1 or trnL). In this pipeline I refer to this step as "demuxing" even though it does not fit a precise definition of demultiplexing. This rule leaves a small percentage of unassigned reads that often very nearly match the expected primer sequence. It might be worth relaxing e or dropping ^ to see if we can include a few more reads, but it's pretty marginal.
 
@@ -163,8 +143,8 @@ rule trim_primers:
         r1 = "demux/{sample}_{amp}_R1.fastq.gz",
         r2 = "demux/{sample}_{amp}_R2.fastq.gz"
     output:
-        r1_trim = "trimmed/{sample}_{amp}_R1.trimmed.fastq.gz",
-        r2_trim = "trimmed/{sample}_{amp}_R2.trimmed.fastq.gz",
+        r1_trim = "trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
+        r2_trim = "trimmed/{sample}_{amp}_R2.primertrim.fastq.gz",
         report = "trimmed_reports/{sample}_{amp}_cutadapt.txt"
     threads: 4
     params:
@@ -172,19 +152,49 @@ rule trim_primers:
         R = lambda wc: {"ITS1": ITS1_R, "trnL": trnL_R}[wc.amp]
     shell:
         r"""
-        mkdir -p trimmed
+        mkdir -p trimmed trimmed_reports
 
         cutadapt \
             -j {threads} \
             -g ^{params.F} \
             -G ^{params.R} \
-            -a CTGTCTCTTATACACATCT \
-            -A AGATGTGTATAAGAGACAG \
             --max-n 0 \
             -o {output.r1_trim} \
             -p {output.r2_trim} \
             {input.r1} {input.r2} \
             > {output.report} 2>&1
+        """
+
+# This ruke trims nextera adapter tails with fastp. I'm trying this because I'm having a hard time with explicitly defining adapter tails in fastp, but I prefer its explicit primer trimming. This is just an experiment for now to see if I can get better tail trimming by combining trimming tools. 
+
+# I'm getting good results trimming tails with fastp this way so I am going to leave the pipeline in tact this way for now. One more step I'm interested in implementing is a maxium length filter, which fastp doesn't explicity support. Looking at the fastp report, my insert size distribution looks really good but I'm getting some leftover debris that is long and low quality towards the tail. I believe this is just junk and a max length filter makes sense here, maybe 80 for ITS1 and 60 for trnL.
+
+rule trim_adapters_fastp:
+    conda: "envs/environment.yaml"
+    input:
+        r1 = "trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
+        r2 = "trimmed/{sample}_{amp}_R2.primertrim.fastq.gz"
+    output:
+        r1_clean = "cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
+        r2_clean = "cleaned/{sample}_{amp}_R2.cleaned.fastq.gz",
+        html     = "cleaned_reports/{sample}_{amp}_fastp.html",
+        json     = "cleaned_reports/{sample}_{amp}_fastp.json"
+    threads: 4
+    shell:
+        r"""
+        mkdir -p cleaned cleaned_reports
+
+        fastp \
+            -i {input.r1} \
+            -I {input.r2} \
+            -o {output.r1_clean} \
+            -O {output.r2_clean} \
+            --detect_adapter_for_pe \
+            -q 30 \
+            -l 50 \
+            -w {threads} \
+            --html {output.html} \
+            --json {output.json}
         """
 
 # This rule generates a QC report from cutadapts reporting generated in the rule above.
@@ -284,13 +294,4 @@ rule summarize_primer_qc:
                     f"{n_filtered}\t{retained}\t{perfect}\t{mismatch1}\t{mismatch2}\t{truncated}\n"
                 )
 
-# This rule runs fastqc on the trimmed samples. This is probably more useful than after demuxing and I can drop the previous QC report above.
 
-rule fastqc_trimmed:
-    input:
-        "trimmed/{sample}_{amp}_R{read}.trimmed.fastq.gz"
-    output:
-        "qc_trimmed/{sample}_{amp}_R{read}.trimmed_fastqc.html"
-    conda: "envs/environment.yaml"
-    shell:
-        "fastqc {input} --outdir qc_trimmed"
