@@ -192,6 +192,8 @@ rule trim_adapters_fastp:
         r2_clean = "trim_clean_qc/cleaned/{sample}_{amp}_R2.cleaned.fastq.gz",
         html     = "trim_clean_qc/cleaned_reports/{sample}_{amp}_fastp.html",
         json     = "trim_clean_qc/cleaned_reports/{sample}_{amp}_fastp.json"
+    params:
+        min_len = lambda wc: {"ITS1": 50, "trnL": 35}[wc.amp]
     threads: 4
     shell:
         r"""
@@ -204,7 +206,7 @@ rule trim_adapters_fastp:
             -O {output.r2_clean} \
             --detect_adapter_for_pe \
             -q 30 \
-            -l 50 \
+            -l {params.min_len} \
             -w {threads} \
             --html {output.html} \
             --json {output.json}
