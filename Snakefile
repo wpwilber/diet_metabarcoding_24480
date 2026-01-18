@@ -12,20 +12,11 @@ SAMPLES = glob_wildcards("fastq/{sample}_R1_001.fastq.gz").sample
 # Define snakemake inputs.
 rule all:
     input:
-        # demux QC
-        expand("trim_clean_qc/qc_demux/{sample}_{amp}_R1_fastqc.html",
-               sample=SAMPLES, amp=["ITS1", "trnL", "unassigned"]),
-        expand("trim_clean_qc/qc_demux/{sample}_{amp}_R2_fastqc.html",
-               sample=SAMPLES, amp=["ITS1", "trnL", "unassigned"]),
-
         # demuxed samples
         expand("trim_clean_qc/demux/{sample}_{amp}_R1.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
         expand("trim_clean_qc/demux/{sample}_{amp}_R2.fastq.gz",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-
-        # read counts
-        "trim_clean_qc/read_counts/read_counts.tsv",
 
         # trimmed reads from cutadapt
         expand("trim_clean_qc/trimmed/{sample}_{amp}_R1.primertrim.fastq.gz",
@@ -56,9 +47,6 @@ rule all:
                sample=SAMPLES, amp=["ITS1", "trnL"]),
         expand("trim_clean_qc/qc_final/{sample}_{amp}_R2.lenfilt_fastqc.html",
                sample=SAMPLES, amp=["ITS1", "trnL"]),
-
-        # primer QC summary
-        "trim_clean_qc/primer_qc/primer_qc_summary.tsv",
 
         # read retention table
         "trim_clean_qc/read_summary/read_retention.tsv"
@@ -99,58 +87,9 @@ rule demux_by_primer:
             {input.r1} {input.r2}
         """
 
-# This rule runs fastqc on the demultiplexed samples.
-
-rule fastqc_demux:
-    conda: "envs/environment.yaml"
-    input:
-        "trim_clean_qc/demux/{sample}_{amp}_R1.fastq.gz",
-        "trim_clean_qc/demux/{sample}_{amp}_R2.fastq.gz"
-    output:
-        "trim_clean_qc/qc_demux/{sample}_{amp}_R1_fastqc.html",
-        "trim_clean_qc/qc_demux/{sample}_{amp}_R1_fastqc.zip",
-        "trim_clean_qc/qc_demux/{sample}_{amp}_R2_fastqc.html",
-        "trim_clean_qc/qc_demux/{sample}_{amp}_R2_fastqc.zip"
-    threads: 2
-    shell:
-        r"""
-        mkdir -p trim_clean_qc/qc_demux
-        fastqc --threads {threads} --outdir trim_clean_qc/qc_demux {input}
-        """
-
-# This rule counts the number of reads in each fastq after demuxing. See the output file read_counts.tsv.
-
-rule count_reads:
-    input:
-        raw = expand("fastq/{sample}_R{read}_001.fastq.gz",
-                     sample=SAMPLES, read=[1,2]),
-        demux = expand("trim_clean_qc/demux/{sample}_{amp}_R{read}.fastq.gz",
-                       sample=SAMPLES,
-                       amp=["ITS1", "trnL", "unassigned"],
-                       read=[1,2])
-    output:
-        "trim_clean_qc/read_counts/read_counts.tsv"
-    threads: 2
-    shell:
-        r"""
-        mkdir -p trim_clean_qc/read_counts
-
-        echo -e "file\treads" > {output}
-
-        for f in fastq/*.fastq.gz; do
-            n=$(gzip -dc "$f" | wc -l)
-            echo -e "$(basename "$f")\t$((n/4))" >> {output}
-        done
-
-        for f in trim_clean_qc/demux/*.fastq.gz; do
-            n=$(gzip -dc "$f" | wc -l)
-            echo -e "$(basename "$f")\t$((n/4))" >> {output}
-        done
-        """
-
 # This rule trims primers from demuxed fastq files and applies an N base filter. Zero tolerance N filtering can remove a lot of pairs from the small number of samples I have run so far. One possible compromise here could be to truncate low quality tails and then run N filtering. I need to look at the distribution of Ns in demuxed samples to determine if this could be useful. I'll look into this later.
 
-rule trim_primers:
+rule trim_primers_cutadapt:
     conda: "envs/environment.yaml"
     input:
         r1 = "trim_clean_qc/demux/{sample}_{amp}_R1.fastq.gz",
@@ -214,7 +153,7 @@ rule trim_adapters_fastp:
 
 # The following rule applies a max length filter to the fastp output. This discards junk sequences that were not trimmed to the expect size range.
 
-rule filter_length:
+rule filter_length_python:
     input:
         r1 = "trim_clean_qc/cleaned/{sample}_{amp}_R1.cleaned.fastq.gz",
         r2 = "trim_clean_qc/cleaned/{sample}_{amp}_R2.cleaned.fastq.gz"
@@ -273,104 +212,7 @@ rule fastqc_final:
         fastqc --threads {threads} --outdir trim_clean_qc/qc_final {input.r1} {input.r2}
         """
 
-# This rule generates a QC report from cutadapts reporting generated in the rule above.
-
-rule summarize_primer_qc:
-    input:
-        reports = expand(
-            "trim_clean_qc/trimmed_reports/{sample}_{amp}_cutadapt.txt",
-            sample=SAMPLES,
-            amp=["ITS1", "trnL"]
-        )
-    output:
-        "trim_clean_qc/primer_qc/primer_qc_summary.tsv"
-    run:
-        import re
-        import os
-        from pathlib import Path
-
-        os.makedirs("trim_clean_qc/primer_qc", exist_ok=True)
-
-        # Header for the summary table
-        with open(output[0], "w") as out:
-            out.write(
-                "sample\tamplicon\ttotal_pairs\tR1_primer_pct\tR2_primer_pct\t"
-                "N_filtered_pct\tretained_pct\tperfect_matches\tmismatch1\tmismatch2\ttruncated\n"
-            )
-
-            # Parse each cutadapt report
-            for report in input.reports:
-                fname = Path(report).name                      # e.g. 23412_S1_ITS1_cutadapt.txt
-                base = fname.replace("_cutadapt.txt", "")      # 23412_S1_ITS1
-                sample, amp = base.rsplit("_", 1)              # sample = 23412_S1, amp = ITS1
-
-                with open(report) as f:
-                    text = f.read()
-
-                # Extract key metrics using regex
-                def extract(pattern, cast=float):
-                    m = re.search(pattern, text)
-                    return cast(m.group(1)) if m else None
-
-                total_pairs = extract(r"Total read pairs processed:\s+([\d,]+)", lambda x: int(x.replace(",", "")))
-                r1_pct = extract(r"Read 1 with adapter:\s+[\d,]+\s+\(([\d\.]+)%\)")
-                r2_pct = extract(r"Read 2 with adapter:\s+[\d,]+\s+\(([\d\.]+)%\)")
-                n_filtered = extract(r"Pairs with too many N:\s+[\d,]+\s+\(([\d\.]+)%\)")
-                retained = extract(r"Pairs written \(passing filters\):\s+[\d,]+\s+\(([\d\.]+)%\)")
-
-                # Primer mismatch table (first read only)
-                # Get primer length and max.err for first read (Adapter 1)
-                m = re.search(
-                    r"=== First read: Adapter 1 ===.*?Length:\s+(\d+);.*?No\. of allowed errors:\s+(\d+)",
-                    text,
-                    flags=re.S,
-                )
-                if m:
-                    primer_len = int(m.group(1))
-                    max_err = int(m.group(2))
-                else:
-                    primer_len = None
-                    max_err = None
-
-                perfect = mismatch1 = mismatch2 = None
-
-                if primer_len is not None and max_err is not None:
-                    # Find the row in the "Overview of removed sequences" table
-                    # that corresponds to the full primer length
-                    row_match = re.search(
-                        rf"\n{primer_len}\s+([0-9,]+)\s+[0-9\.]+\s+{max_err}\s+([0-9,\s]+)",
-                        text,
-                    )
-                    if row_match:
-                        # counts_str contains the error counts columns (space-separated)
-                        counts_str = row_match.group(2).strip()
-                        counts = [
-                            int(x.replace(",", ""))
-                            for x in counts_str.split()
-                        ]
-                        # First column = perfect matches (0 mismatches)
-                        perfect = counts[0] if len(counts) > 0 else 0
-                        # Second column = 1 mismatch (if present)
-                        mismatch1 = counts[1] if len(counts) > 1 else 0
-                        # Third column = 2 mismatches (if present)
-                        mismatch2 = counts[2] if len(counts) > 2 else 0
-                    else:
-                        perfect = mismatch1 = mismatch2 = 0
-
-                # Truncated primer matches (length 18 or 19 or 21)
-                truncated = 0
-                for length in ["18", "19", "21"]:
-                    m = re.search(rf"\n{length}\s+([\d,]+)", text)
-                    if m:
-                        truncated += int(m.group(1).replace(",", ""))
-
-                # Write row
-                out.write(
-                    f"{sample}\t{amp}\t{total_pairs}\t{r1_pct}\t{r2_pct}\t"
-                    f"{n_filtered}\t{retained}\t{perfect}\t{mismatch1}\t{mismatch2}\t{truncated}\n"
-                )
-
-# Rule for generation a read retention table across pipeline steps.
+# Rule for generating a read retention table across pipeline steps.
 rule summarize_read_retention:
     input:
         raw = expand("fastq/{sample}_R1_001.fastq.gz", sample=SAMPLES),
