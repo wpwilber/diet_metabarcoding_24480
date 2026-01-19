@@ -49,8 +49,10 @@ rule all:
                sample=SAMPLES, amp=["ITS1", "trnL"]),
 
         # read retention table
-        "trim_clean_qc/read_summary/read_retention.tsv"
+        "trim_clean_qc/read_summary/read_retention.tsv",
 
+        # DADA2 output
+        directory("dada2")
 
 # This rule separates the fastq files by target amplicon (ITS1 or trnL). In this pipeline I refer to this step as "demuxing" even though it does not fit a precise definition of demultiplexing. This rule leaves a small percentage of unassigned reads that often very nearly match the expected primer sequence. It might be worth relaxing e or dropping ^ to see if we can include a few more reads, but it's pretty marginal.
 
@@ -265,3 +267,20 @@ rule summarize_read_retention:
                     f"{sample}\t{raw}\t{unassigned}\t{its_demux}\t{its_trim}\t{its_clean}\t{its_filt}\t"
                     f"{trnl_demux}\t{trnl_trim}\t{trnl_clean}\t{trnl_filt}\n"
                 )
+
+# The following rule runs DADA2 sample inference on trnL samples.
+
+rule dada2_trnl:
+    input:
+        # All filtered R1 and R2 files for trnL
+        expand("trim_clean_qc/length_filtered/{sample}_trnL_R1.lenfilt.fastq.gz", sample=SAMPLES),
+        expand("trim_clean_qc/length_filtered/{sample}_trnL_R2.lenfilt.fastq.gz", sample=SAMPLES)
+    output:
+        directory("dada2")
+    threads: 8
+    shell:
+        r"""
+        mkdir -p dada2
+        Rscript scripts/run_dada2_trnl.R
+        """
+
