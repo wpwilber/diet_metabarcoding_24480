@@ -11,3 +11,5 @@ read_counts/*
 trimmed/*
 trimmed_reports/*
 trim_clean_qc/*
+.Rproj.user
+dada2/*
