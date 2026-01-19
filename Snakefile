@@ -172,28 +172,35 @@ import gzip
 
 max_len = {params.max_len}
 
-def filter_fastq(infile, outfile):
-    with gzip.open(infile, "rt") as fin, gzip.open(outfile, "wt") as fout:
+def filter_fastq_pair(r1_in, r2_in, r1_out, r2_out):
+    with gzip.open(r1_in, "rt") as f1, gzip.open(r2_in, "rt") as f2, \
+         gzip.open(r1_out, "wt") as o1, gzip.open(r2_out, "wt") as o2:
+
         while True:
-            h = fin.readline()
-            if not h:
+            h1 = f1.readline()
+            h2 = f2.readline()
+            if not h1 or not h2:
                 break
-            seq = fin.readline().rstrip()
-            plus = fin.readline()
-            qual = fin.readline().rstrip()
 
-            if len(seq) <= max_len:
-                fout.write(h)
-                fout.write(seq + "\n")
-                fout.write(plus)
-                fout.write(qual + "\n")
+            s1 = f1.readline().rstrip()
+            s2 = f2.readline().rstrip()
 
-filter_fastq("{input.r1}", "{output.r1_filt}")
-filter_fastq("{input.r2}", "{output.r2_filt}")
+            p1 = f1.readline()
+            p2 = f2.readline()
+
+            q1 = f1.readline().rstrip()
+            q2 = f2.readline().rstrip()
+
+            # Keep the pair only if BOTH reads pass
+            if len(s1) <= max_len and len(s2) <= max_len:
+                o1.write(h1); o1.write(s1 + "\n"); o1.write(p1); o1.write(q1 + "\n")
+                o2.write(h2); o2.write(s2 + "\n"); o2.write(p2); o2.write(q2 + "\n")
+
+filter_fastq_pair("{input.r1}", "{input.r2}", "{output.r1_filt}", "{output.r2_filt}")
 EOF
         """
 
-# Run a final fastqc on the final length filtered files.
+# Run fastqc on the final length filtered files.
 
 rule fastqc_final:
     conda: "envs/environment.yaml"
@@ -213,6 +220,7 @@ rule fastqc_final:
         """
 
 # Rule for generating a read retention table across pipeline steps.
+
 rule summarize_read_retention:
     input:
         raw = expand("fastq/{sample}_R1_001.fastq.gz", sample=SAMPLES),
@@ -257,4 +265,3 @@ rule summarize_read_retention:
                     f"{sample}\t{raw}\t{unassigned}\t{its_demux}\t{its_trim}\t{its_clean}\t{its_filt}\t"
                     f"{trnl_demux}\t{trnl_trim}\t{trnl_clean}\t{trnl_filt}\n"
                 )
-
