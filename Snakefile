@@ -52,7 +52,8 @@ rule all:
         "trim_clean_qc/read_summary/read_retention.tsv",
 
         # DADA2 output
-        directory("dada2")
+        "dada2/trnL_done", 
+        "dada2/ITS1_done"
 
 # This rule separates the fastq files by target amplicon (ITS1 or trnL). In this pipeline I refer to this step as "demuxing" even though it does not fit a precise definition of demultiplexing. This rule leaves a small percentage of unassigned reads that often very nearly match the expected primer sequence. It might be worth relaxing e or dropping ^ to see if we can include a few more reads, but it's pretty marginal.
 
@@ -272,15 +273,31 @@ rule summarize_read_retention:
 
 rule dada2_trnl:
     input:
-        # All filtered R1 and R2 files for trnL
         expand("trim_clean_qc/length_filtered/{sample}_trnL_R1.lenfilt.fastq.gz", sample=SAMPLES),
         expand("trim_clean_qc/length_filtered/{sample}_trnL_R2.lenfilt.fastq.gz", sample=SAMPLES)
     output:
-        directory("dada2")
+        "dada2/trnL_done"
     threads: 8
     shell:
         r"""
         mkdir -p dada2
         Rscript scripts/run_dada2_trnl.R
+        touch dada2/trnL_done
+        """
+
+# The following rule runs DADA2 sample inference on ITS1 samples.
+
+rule dada2_its1:
+    input:
+        expand("trim_clean_qc/length_filtered/{sample}_ITS1_R1.lenfilt.fastq.gz", sample=SAMPLES),
+        expand("trim_clean_qc/length_filtered/{sample}_ITS1_R2.lenfilt.fastq.gz", sample=SAMPLES)
+    output:
+        "dada2/ITS1_done"
+    threads: 8
+    shell:
+        r"""
+        mkdir -p dada2
+        Rscript scripts/run_dada2_ITS1.R
+        touch dada2/ITS1_done
         """
 

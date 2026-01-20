@@ -10,15 +10,15 @@ library(here)
 # Find all forward reads in the length_filtered directory
 filtFs <- sort(list.files(
   here("trim_clean_qc", "length_filtered"),
-  pattern = "_trnL_R1.lenfilt.fastq.gz$",
+  pattern = "_ITS1_R1.lenfilt.fastq.gz$",
   full.names = TRUE
 ))
 
 # Derive reverse reads by replacing R1 → R2
 filtRs <- gsub("_R1.lenfilt.fastq.gz$", "_R2.lenfilt.fastq.gz", filtFs)
 
-# Extract sample names (everything before _trnL_R1...)
-sample_names <- sub("_trnL_R1.lenfilt.fastq.gz$", "", basename(filtFs))
+# Extract sample names (everything before _ITS1_R1...)
+sample_names <- sub("_ITS1_R1.lenfilt.fastq.gz$", "", basename(filtFs))
 
 cat("Discovered samples:\n")
 print(sample_names)
@@ -41,11 +41,11 @@ errF <- learnErrors(filtFs, multithread = TRUE)
 errR <- learnErrors(filtRs, multithread = TRUE)
 
 # Save pooled error model plots once at the top level
-pdf(file.path(top_outdir, "trnL_pooled_error_model_forward.pdf"))
+pdf(file.path(top_outdir, "ITS1_pooled_error_model_forward.pdf"))
 plotErrors(errF, nominalQ = TRUE)
 dev.off()
 
-pdf(file.path(top_outdir, "trnL_pooled_error_model_reverse.pdf"))
+pdf(file.path(top_outdir, "ITS1_pooled_error_model_reverse.pdf"))
 plotErrors(errR, nominalQ = TRUE)
 dev.off()
 
@@ -112,8 +112,8 @@ for (i in seq_along(sample_names)) {
   cat("ASV length distribution:\n")
   print(table(asv_lengths))
   
-  pdf(file.path(outdir, "trnL_asv_length_histogram.pdf"))
-  hist(asv_lengths, breaks = 30, main = "trnL ASV Length Distribution", xlab = "bp")
+  pdf(file.path(outdir, "ITS1_asv_length_histogram.pdf"))
+  hist(asv_lengths, breaks = 30, main = "ITS1 ASV Length Distribution", xlab = "bp")
   dev.off()
   
   # -------------------------------------------------------------------
@@ -132,10 +132,10 @@ for (i in seq_along(sample_names)) {
   # -------------------------------------------------------------------
   # Save outputs
   # -------------------------------------------------------------------
-  saveRDS(dadaF, file.path(outdir, "trnL_dadaF.rds"))
-  saveRDS(dadaR, file.path(outdir, "trnL_dadaR.rds"))
-  saveRDS(mergers, file.path(outdir, "trnL_merged_pairs.rds"))
-  saveRDS(seqtab_nochim, file.path(outdir, "trnL_seqtab_nochim.rds"))
+  saveRDS(dadaF, file.path(outdir, "ITS1_dadaF.rds"))
+  saveRDS(dadaR, file.path(outdir, "ITS1_dadaR.rds"))
+  saveRDS(mergers, file.path(outdir, "ITS1_merged_pairs.rds"))
+  saveRDS(seqtab_nochim, file.path(outdir, "ITS1_seqtab_nochim.rds"))
   
   cat("Finished sample:", sample, "\n")
 }
