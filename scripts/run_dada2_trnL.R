@@ -3,6 +3,8 @@
 library(dada2)
 library(here)
 
+all_track <- list()
+
 # -------------------------------------------------------------------
 # 1. Discover samples
 # -------------------------------------------------------------------
@@ -130,6 +132,24 @@ for (i in seq_along(sample_names)) {
       sum(seqtab_nochim), "of", sum(seqtab), "\n")
   
   # -------------------------------------------------------------------
+  # Read retention tracking
+  # -------------------------------------------------------------------
+  
+  getN <- function(x) sum(getUniques(x))
+  
+  track <- data.frame(
+    input      = sum(derepF$uniques),   # total input pairs
+    denoisedF  = getN(dadaF),
+    denoisedR  = getN(dadaR),
+    merged     = getN(mergers),
+    nonchim    = sum(seqtab_nochim)
+  )
+  
+  rownames(track) <- sample
+  
+  all_track[[sample]] <- track
+  
+  # -------------------------------------------------------------------
   # Save outputs
   # -------------------------------------------------------------------
   saveRDS(dadaF, file.path(outdir, "trnL_dadaF.rds"))
@@ -140,4 +160,53 @@ for (i in seq_along(sample_names)) {
   cat("Finished sample:", sample, "\n")
 }
 
+combined <- do.call(rbind, all_track)
+
+write.table(
+  combined,
+  file = file.path(top_outdir, "trnL_read_retention_all_samples.tsv"),
+  sep = "\t",
+  quote = FALSE,
+  col.names = NA
+)
+
 cat("\nAll samples processed.\n")
+
+# After the loop, combine all seqtab_nochim objects
+all_seqtabs <- list.files(
+  path = "dada2",
+  pattern = "trnL_seqtab_nochim.rds$",
+  full.names = TRUE,
+  recursive = TRUE
+)
+
+seqtabs <- lapply(all_seqtabs, readRDS)
+
+# Extract sample names from directory names
+sample_names <- basename(dirname(all_seqtabs))
+
+# Assign rownames to each table
+for (i in seq_along(seqtabs)) {
+  rownames(seqtabs[[i]]) <- sample_names[i]
+}
+
+# Merge safely
+if (length(seqtabs) == 1) {
+  seqtab_all <- seqtabs[[1]]
+} else {
+  seqtab_all <- do.call(mergeSequenceTables, seqtabs)
+}
+
+# Extract ASV sequences
+asv_seqs <- colnames(seqtab_all)
+
+# Write FASTA
+asv_fasta <- "dada2/trnL_ASVs.fasta"
+sink(asv_fasta)
+for (i in seq_along(asv_seqs)) {
+  cat(paste0(">ASV_", i, "\n"))
+  cat(asv_seqs[i], "\n")
+}
+sink()
+
+
