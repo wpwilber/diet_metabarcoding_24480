@@ -200,6 +200,9 @@ if (length(seqtabs) == 1) {
 # Extract ASV sequences
 asv_seqs <- colnames(seqtab_all)
 
+asv_ids <- paste0("ASV_", seq_along(asv_seqs))
+colnames(seqtab_all) <- asv_ids
+
 # Write FASTA
 asv_fasta <- "dada2/trnL_ASVs.fasta"
 sink(asv_fasta)
@@ -208,5 +211,14 @@ for (i in seq_along(asv_seqs)) {
   cat(asv_seqs[i], "\n")
 }
 sink()
+
+# Export AVS table for Qiime2
+write.table(
+  seqtab_all,
+  file = "dada2/trnL_seqtab_all.tsv",
+  sep = "\t",
+  quote = FALSE,
+  col.names = NA
+)
 
 

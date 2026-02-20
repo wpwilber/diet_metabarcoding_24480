@@ -13,3 +13,4 @@ trimmed_reports/*
 trim_clean_qc/*
 .Rproj.user
 dada2/*
+databases/*
